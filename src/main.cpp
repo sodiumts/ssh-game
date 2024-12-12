@@ -8,12 +8,14 @@
 #include <poll.h>
 #include <utmp.h>
 #include <unistd.h>
+#include <thread>
+#include <chrono>
 
 const char* hostkey_path = "ssh_host_rsa_key";
 
 const int PORT = 2200;
 int authenticated = 0;
-
+int allocatedTerminal = 0;
 static int auth_none(ssh_session session,
                      const char *user,
                      void *userdata)
@@ -24,8 +26,20 @@ static int auth_none(ssh_session session,
 
 static ssh_channel chan=NULL;
 
+struct userdata {
+    int termWidth; 
+    int termHeight;
+};
+
+struct userdata user; 
+
 static int pty_request(ssh_session session, ssh_channel channel, const char *term, int x, int y, int px, int py, void *userdata){
+    user.termWidth = x;
+    user.termHeight = y;
+    std::cout << "Term width: " << x << std::endl;
+    std::cout << "Term height: " << y << std::endl;
     printf("Allocated terminal\n");
+    allocatedTerminal = 1;
     return 0;
 }
 
@@ -37,11 +51,18 @@ static int shell_request(ssh_session session, ssh_channel channel, void *userdat
 static int exec_request(ssh_session session, ssh_channel channel, const char *command, void *userdata) {
     return 0;
 }
-
+static int window_change(ssh_session session, ssh_channel channel, int width, int height, int pxwidth, int pwheight, void *userdata) {
+    user.termWidth = width;
+    user.termHeight = height;
+ 
+    std::cout << "Term size changed: " << width << ", " << height << std::endl;
+    return 0;
+}
 struct ssh_channel_callbacks_struct channel_cb = {
     .channel_pty_request_function = pty_request,
     .channel_shell_request_function = shell_request,
-    .channel_exec_request_function = exec_request
+    .channel_pty_window_change_function = window_change,
+    .channel_exec_request_function = exec_request,
 };
 
 static ssh_channel new_session_channel(ssh_session session, void *userdata){
@@ -52,6 +73,35 @@ static ssh_channel new_session_channel(ssh_session session, void *userdata){
     ssh_callbacks_init(&channel_cb);
     ssh_set_channel_callbacks(chan, &channel_cb);
     return chan;
+}
+
+void moveCursorToMiddle(ssh_channel chan) {
+    int middleX = user.termWidth/ 2;
+    int middleY = user.termHeight / 2;
+    
+    std::cout << "Writing at: " << middleX << ", " << middleY << std::endl;
+    std::string cursorPosition = "\e[" + std::to_string(middleY) + ";" + std::to_string(middleX) + "H";
+    
+    if (ssh_channel_write(chan, cursorPosition.c_str(), cursorPosition.size()) == SSH_ERROR) {
+        printf("Error moving cursor\n");
+        return;
+    }
+}
+void typeHelloWorldWithDelay(ssh_channel chan) {
+    std::string message = "Hello World";
+    
+    for (char c : message) {
+        if (ssh_channel_write(chan, &c, 1) == SSH_ERROR) {
+            printf("Error writing to channel\n");
+            return;
+        }
+
+        fflush(stdout);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+}
+static void handle_session(ssh_event event, ssh_session session) {
 }
 int main() {
     struct ssh_server_callbacks_struct cb = {
@@ -96,7 +146,7 @@ int main() {
     char buf[2049];
     static int error;
 
-    while (!(authenticated && chan != NULL)){
+    while (!(authenticated && chan != NULL && allocatedTerminal)){
         if(error)
             break;
         r = ssh_event_dopoll(mainloop, -1);
@@ -110,32 +160,29 @@ int main() {
         printf("Error, exiting loop\n");
     } else {
         printf("Authenticated and got a channel\n");
-        std::string altBuf = "\e[?1049h";
+        std::string altBuf = "\e[?1049h\e[?25l";
 
         if (ssh_channel_write(chan, altBuf.c_str(), altBuf.size()) == SSH_ERROR) {
             printf("error writing to channel\n");
             return 1;
         }
+        moveCursorToMiddle(chan);
+        typeHelloWorldWithDelay(chan);
         do{
             i=ssh_channel_read(chan, buf, sizeof(buf) - 1, 0);
             if(i>0) {
                 if (buf[0] == '\003') {
-                    std::string altBufDisable = "\e[?1049l";
+                    std::string altBufDisable = "\e[?1049l\e[?25h";
                     if (ssh_channel_write(chan, altBufDisable.c_str(), altBufDisable.size()) == SSH_ERROR) {
                         printf("error writing to channel\n");
                         return 1;
                     }
                     break; 
                 } 
-                // if (ssh_channel_write(chan, buf, i) == SSH_ERROR) {
-                //     printf("error writing to channel\n");
-                //     return 1;
-                // }
 
                 buf[i] = '\0';
                 printf("%s", buf);
                 fflush(stdout);
-
                 if (buf[0] == '\x0d') {
                     if (ssh_channel_write(chan, "\n", 1) == SSH_ERROR) {
                         printf("error writing to channel\n");
