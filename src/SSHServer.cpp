@@ -55,6 +55,7 @@ int SSHServer::pty_request(ssh_session session, ssh_channel channel, const char 
     udata->termWidth = x;
     udata->termHeight = y;
     udata->allocatedTerminal = true;
+    udata->updatedTerm = true;
     return 0;
 }
 
@@ -69,7 +70,9 @@ int SSHServer::exec_request(ssh_session session, ssh_channel channel, const char
 int SSHServer::window_change(ssh_session session, ssh_channel channel, int width, int height, int pxwidth, int pwheight, void *userdata) {
     struct UserData *udata = static_cast<UserData*>(userdata);
     udata->termWidth = width;
-    udata->termHeight = height; 
+    udata->termHeight = height;
+    udata->updatedTerm = true;
+    std::println("Resized to: {},{}", width, height);
     return 0;
 }
 
@@ -83,7 +86,7 @@ ssh_channel SSHServer::new_session_channel(ssh_session session, void *userdata) 
 
 
 void SSHServer::handle_session_connection(ssh_session session) {
-    struct UserData udata = {0, 0, false};
+    struct UserData udata = {0, 0, false, false};
     struct SessionData sdata = {nullptr, false};
 
     struct ssh_server_callbacks_struct server_cb = {
@@ -133,7 +136,7 @@ void SSHServer::handle_session_connection(ssh_session session) {
     std::println("User: {} connected", sdata.username);
     
     m_mtx.lock();
-    m_terminalWriters[m_nextSessionID] = std::move(std::make_unique<TerminalWriter>(sdata.channel));    
+    m_terminalWriters[m_nextSessionID] = std::move(std::make_unique<TerminalWriter>(sdata.channel, udata.termWidth, udata.termHeight));    
     sdata.sessionId = m_nextSessionID;
     m_nextSessionID += 1;
     m_mtx.unlock();
@@ -141,8 +144,8 @@ void SSHServer::handle_session_connection(ssh_session session) {
     auto &terminalWriter = m_terminalWriters[sdata.sessionId];
     terminalWriter->disable_cursor();
     terminalWriter->alternate_screen_buffer_enable();
-
-    listen_for_messages(sdata);
+    terminalWriter->write_image("../assets/night_view.csv");
+    listen_for_messages(sdata, udata);
     
     std::println("User: {} disconnected", sdata.username);
     
@@ -154,13 +157,17 @@ void SSHServer::handle_session_connection(ssh_session session) {
     ssh_disconnect(session);
 }
 
-void SSHServer::listen_for_messages(SessionData &sessionData) {
+void SSHServer::listen_for_messages(SessionData &sessionData, UserData &userData) {
     auto &terminalWriter = m_terminalWriters[sessionData.sessionId];
 
     std::array<char, 2049> buffer;
     int i;
-    do {
-        i=ssh_channel_read(sessionData.channel, buffer.data(), buffer.size() - 1, 0);
+    while(true) {
+        i=ssh_channel_read_nonblocking(sessionData.channel, buffer.data(), buffer.size() - 1, 0);
+        if(userData.updatedTerm) {
+            userData.updatedTerm = false;
+            terminalWriter->update_terminal(userData.termWidth, userData.termHeight);
+        } 
         if (i > 0) {
             if (buffer[0] == '\x03' || buffer[0] == '\x04') { // handle ctrl+c and ctrl+d
                 terminalWriter->alternate_screen_buffer_disable();
@@ -171,7 +178,7 @@ void SSHServer::listen_for_messages(SessionData &sessionData) {
             buffer[i] = '\0';
             std::println("Message from {}: {}", sessionData.username, buffer.data());
         }
-    } while (i > 0); 
+    } 
 }
 };
 

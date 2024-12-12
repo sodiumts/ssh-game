@@ -1,8 +1,14 @@
 #include "TerminalWriter.hpp"
 
+#include <fstream>
+#include <vector>
+#include <sstream>
+#include <iostream>
+
 namespace sshGame {
 
-TerminalWriter::TerminalWriter(ssh_channel &channel) : m_channel(channel) {}
+TerminalWriter::TerminalWriter(ssh_channel &channel, int width, int height) : m_channel(channel), m_width(width), m_height(height) {}
+
 TerminalWriter::~TerminalWriter() {}
 
 void TerminalWriter::write_string(const std::string &text) {
@@ -17,11 +23,116 @@ void TerminalWriter::alternate_screen_buffer_disable() {
     write_string("\e[?1049l");
 }
 
+void TerminalWriter::clear_screen() {
+    write_string("\033[2J");
+}
+
 void TerminalWriter::enable_cursor() {
     write_string("\e[?25h");
 }
 
 void TerminalWriter::disable_cursor() {
     write_string("\e[?25l");
+}
+
+std::string get_centered_text(int width, int height, const std::string& text) {
+    int xPos = (width - text.length()) / 2;
+    int yPos = height / 2;
+
+    std::string result = "\033[" + std::to_string(yPos) + ";" + std::to_string(xPos + 1) + "H" + text;
+    
+    return result;
+}
+
+void TerminalWriter::update_terminal(int width, int height) {
+    m_width = width;
+    m_height = height;
+    if (width < 100 || height < 45) {
+        clear_screen();
+        write_string(get_centered_text(width, height, "<< Increase the size of the terminal >>"));
+    } else {
+        clear_screen();
+        write_image("../assets/night_view.csv");
+    }
+}
+
+std::vector<int> mappings = {0, 9786, 9787, 9829, 9830, 9827, 9824, 8226, 9688, 9675, 9689, 9794, 9792, 9834, 9835, 9788, 9658, 9668, 8597, 8252, 182, 167, 9644, 8616, 8593, 8595, 8594, 8592, 8735, 8596, 9650, 9660, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 8962, 199, 252, 233, 226, 228, 224, 229, 231, 234, 235, 232, 239, 238, 236, 196, 197, 201, 230, 198, 244, 246, 242, 251, 249, 255, 214, 220, 162, 163, 165, 8359, 402, 225, 237, 243, 250, 241, 209, 170, 186, 191, 8976, 172, 189, 188, 161, 171, 187, 9617, 9618, 9619, 9474, 9508, 9569, 9570, 9558, 9557, 9571, 9553, 9559, 9565, 9564, 9563, 9488, 9492, 9524, 9516, 9500, 9472, 9532, 9566, 9567, 9562, 9556, 9577, 9574, 9568, 9552, 9580, 9575, 9576, 9572, 9573, 9561, 9560, 9554, 9555, 9579, 9578, 9496, 9484, 9608, 9604, 9612, 9616, 9600, 945, 223, 915, 960, 931, 963, 181, 964, 934, 920, 937, 948, 8734, 966, 949, 8745, 8801, 177, 8805, 8804, 8992, 8993, 247, 8776, 176, 8729, 183, 8730, 8319, 178, 9632, 160};
+std::string unicode_to_utf8(int codepoint) {
+    std::string utf8_string;
+    
+    if (codepoint < 0x80) {
+        utf8_string.push_back(static_cast<char>(codepoint));
+    } else if (codepoint < 0x800) {
+        utf8_string.push_back(static_cast<char>((codepoint >> 6) | 0xC0));
+        utf8_string.push_back(static_cast<char>((codepoint & 0x3F) | 0x80));
+    } else if (codepoint < 0x10000) {
+        utf8_string.push_back(static_cast<char>((codepoint >> 12) | 0xE0));
+        utf8_string.push_back(static_cast<char>(((codepoint >> 6) & 0x3F) | 0x80));
+        utf8_string.push_back(static_cast<char>((codepoint & 0x3F) | 0x80));
+    } else if (codepoint < 0x110000) {
+        utf8_string.push_back(static_cast<char>((codepoint >> 18) | 0xF0));
+        utf8_string.push_back(static_cast<char>(((codepoint >> 12) & 0x3F) | 0x80));
+        utf8_string.push_back(static_cast<char>(((codepoint >> 6) & 0x3F) | 0x80));
+        utf8_string.push_back(static_cast<char>((codepoint & 0x3F) | 0x80));
+    } else {
+        throw std::invalid_argument("Invalid Unicode codepoint");
+    }
+    
+    return utf8_string;
+}
+std::string extended_ascii_to_utf8(int ascii_code) {
+    wchar_t mapping = mappings[ascii_code]; 
+    return unicode_to_utf8(mapping);
+}
+void TerminalWriter::print_at_position(int x, int y, const std::string& utf_char, const std::string& fg_color, const std::string& bg_color) {
+    int fg_r = std::stoi(fg_color.substr(1, 2), nullptr, 16);
+    int fg_g = std::stoi(fg_color.substr(3, 2), nullptr, 16);
+    int fg_b = std::stoi(fg_color.substr(5, 2), nullptr, 16);
+
+    int bg_r = std::stoi(bg_color.substr(1, 2), nullptr, 16);
+    int bg_g = std::stoi(bg_color.substr(3, 2), nullptr, 16);
+    int bg_b = std::stoi(bg_color.substr(5, 2), nullptr, 16);
+
+    std::string print = "\033[" + std::to_string(y) + ";" + std::to_string(x) + "H";
+    print += "\033[38;2;" + std::to_string(fg_r) + ";" + std::to_string(fg_g) + ";" + std::to_string(fg_b) + "m";
+    print += "\033[48;2;" + std::to_string(bg_r) + ";" + std::to_string(bg_g) + ";" + std::to_string(bg_b) + "m";
+    print += utf_char;
+    print += "\033[0m";
+
+    write_string(print);
+}
+
+void TerminalWriter::write_image(const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        throw std::runtime_error("failed to open file");
+    }
+
+    std::string line;
+    bool first = true;
+    while(std::getline(file, line)) {
+        if(first) {
+            first = false;
+            continue;
+        }
+        std::stringstream ss(line);
+
+        int x, y, ascii_code;
+        std::string fg_color, bg_color;
+        std::string temp;
+
+        std::getline(ss, temp, ',');
+        x = std::stoi(temp);
+
+        std::getline(ss, temp, ',');
+        y = std::stoi(temp);
+
+        std::getline(ss, temp, ','); 
+        ascii_code = std::stoi(temp);
+
+        std::getline(ss, fg_color, ','); 
+        std::getline(ss, bg_color, ',');
+        print_at_position(x, y, extended_ascii_to_utf8(ascii_code), fg_color, bg_color);
+    }
 }
 }

@@ -18,6 +18,7 @@ class SSHServer {
         int termWidth;
         int termHeight;
         bool allocatedTerminal;
+        bool updatedTerm;
     };
 
     struct SessionData {
@@ -42,7 +43,7 @@ class SSHServer {
         static ssh_channel new_session_channel(ssh_session session, void *userdata);
         
         void handle_session_connection(ssh_session session);
-        void listen_for_messages(SessionData &sessionData);
+        void listen_for_messages(SessionData &sessionData, UserData &userData);
 
         std::mutex m_mtx;
         ssh_bind m_sshBind;
