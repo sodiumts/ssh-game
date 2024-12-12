@@ -8,6 +8,7 @@
 #include <poll.h>
 #include <utmp.h>
 #include <unistd.h>
+
 const char* hostkey_path = "ssh_host_rsa_key";
 
 const int PORT = 2200;
@@ -17,44 +18,33 @@ static int auth_none(ssh_session session,
                      const char *user,
                      void *userdata)
 {
-
-    (void)user; /* unused */
-    (void)userdata; /* unused */
     authenticated = 1;
     return SSH_AUTH_SUCCESS;
 }
 
 static ssh_channel chan=NULL;
 
-static int pty_request(ssh_session session, ssh_channel channel, const char *term,
-        int x,int y, int px, int py, void *userdata){
-    (void) session;
-    (void) channel;
-    (void) term;
-    (void) x;
-    (void) y;
-    (void) px;
-    (void) py;
-    (void) userdata;
+static int pty_request(ssh_session session, ssh_channel channel, const char *term, int x, int y, int px, int py, void *userdata){
     printf("Allocated terminal\n");
     return 0;
 }
 
 static int shell_request(ssh_session session, ssh_channel channel, void *userdata){
-    (void)session;
-    (void)channel;
-    (void)userdata;
     printf("Allocated shell\n");
     return 0;
 }
+
+static int exec_request(ssh_session session, ssh_channel channel, const char *command, void *userdata) {
+    return 0;
+}
+
 struct ssh_channel_callbacks_struct channel_cb = {
     .channel_pty_request_function = pty_request,
-    .channel_shell_request_function = shell_request
+    .channel_shell_request_function = shell_request,
+    .channel_exec_request_function = exec_request
 };
 
 static ssh_channel new_session_channel(ssh_session session, void *userdata){
-    (void) session;
-    (void) userdata;
     if(chan != NULL)
         return NULL;
     printf("Allocated session channel\n");
@@ -64,17 +54,18 @@ static ssh_channel new_session_channel(ssh_session session, void *userdata){
     return chan;
 }
 int main() {
-
     struct ssh_server_callbacks_struct cb = {
         .userdata = NULL,
         .auth_none_function = auth_none,
-        .channel_open_request_session_function = new_session_channel
+        .channel_open_request_session_function = new_session_channel,
     };
     //ssh_set_log_level(SSH_LOG_FUNCTIONS);
     ssh_bind sshbind = ssh_bind_new();
+
     ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_BINDADDR, "0.0.0.0");
     ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_RSAKEY, hostkey_path);
     ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_BINDPORT, &PORT);
+
     if (ssh_bind_listen(sshbind) != SSH_OK) {
         std::cerr << "Error binding SSH server: " << ssh_get_error(sshbind) << std::endl;
         ssh_bind_free(sshbind);
@@ -162,7 +153,6 @@ int main() {
 
     std::cout << "Client disconnected." << std::endl;
 
-    ssh_bind_free(sshbind);
     return 0;
 }
 
