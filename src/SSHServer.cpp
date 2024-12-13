@@ -95,6 +95,7 @@ void SSHServer::handle_session_connection(ssh_session session) {
         .channel_open_request_session_function = new_session_channel,
     };
 
+    // TODO: Add .channel_data_function for callback based data
     struct ssh_channel_callbacks_struct channel_cb = {
         .userdata = &udata,
         .channel_pty_request_function = pty_request,
@@ -112,7 +113,7 @@ void SSHServer::handle_session_connection(ssh_session session) {
         ssh_disconnect(session);
         return;
     }
-
+    
     ssh_event mainLoop = ssh_event_new();
     ssh_event_add_session(mainLoop, session);
     
@@ -162,6 +163,8 @@ void SSHServer::listen_for_messages(SessionData &sessionData, UserData &userData
 
     std::array<char, 2049> buffer;
     int i;
+    // TODO: Replace this with ssh_channel_data_callback for callback based data reading from the channel
+    // Might free up resources
     while(true) {
         i=ssh_channel_read_nonblocking(sessionData.channel, buffer.data(), buffer.size() - 1, 0);
         if(userData.updatedTerm) {
