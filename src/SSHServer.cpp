@@ -51,11 +51,11 @@ int SSHServer::auth_none(ssh_session session, const char *user, void *userdata) 
 }
 
 int SSHServer::pty_request(ssh_session session, ssh_channel channel, const char *term, int x, int y, int px, int py, void *userdata) {
-    struct UserData *udata = static_cast<UserData*>(userdata);
-    udata->termWidth = x;
-    udata->termHeight = y;
-    udata->allocatedTerminal = true;
-    udata->updatedTerm = true;
+    struct SessionData *sessionData = static_cast<SessionData*>(userdata);
+    sessionData->termWidth = x;
+    sessionData->termHeight = y;
+    sessionData->allocatedTerminal = true;
+    //sessionData->server.updatedTerminalCB(*sessionData);
     return 0;
 }
 
@@ -68,11 +68,11 @@ int SSHServer::exec_request(ssh_session session, ssh_channel channel, const char
 }
 
 int SSHServer::window_change(ssh_session session, ssh_channel channel, int width, int height, int pxwidth, int pwheight, void *userdata) {
-    struct UserData *udata = static_cast<UserData*>(userdata);
-    udata->termWidth = width;
-    udata->termHeight = height;
-    udata->updatedTerm = true;
+    struct SessionData *sessionData= static_cast<SessionData*>(userdata);
+    sessionData->termWidth = width;
+    sessionData->termHeight = height;
     std::println("Resized to: {},{}", width, height);
+    sessionData->server->updatedTerminalCB(*sessionData);
     return 0;
 }
 
@@ -84,10 +84,13 @@ ssh_channel SSHServer::new_session_channel(ssh_session session, void *userdata) 
     return sdata->channel;
 }
 
+void SSHServer::updatedTerminalCB(SessionData &sessionData) {
+    auto& terminalWriter = m_terminalWriters[sessionData.sessionId];
+    terminalWriter->update_terminal(sessionData.termWidth, sessionData.termHeight);
+}
 
 void SSHServer::handle_session_connection(ssh_session session) {
-    struct UserData udata = {0, 0, false, false};
-    struct SessionData sdata = {nullptr, false};
+    struct SessionData sdata = {nullptr, false, "", false, -1, 0, 0, getSharedPtr()};
 
     struct ssh_server_callbacks_struct server_cb = {
         .userdata = &sdata,
@@ -95,9 +98,8 @@ void SSHServer::handle_session_connection(ssh_session session) {
         .channel_open_request_session_function = new_session_channel,
     };
 
-    // TODO: Add .channel_data_function for callback based data
     struct ssh_channel_callbacks_struct channel_cb = {
-        .userdata = &udata,
+        .userdata = &sdata,
         .channel_pty_request_function = pty_request,
         .channel_shell_request_function = shell_request,
         .channel_pty_window_change_function = window_change,
@@ -126,7 +128,7 @@ void SSHServer::handle_session_connection(ssh_session session) {
     
     ssh_set_channel_callbacks(sdata.channel, &channel_cb);
     
-    while (!udata.allocatedTerminal) {
+    while (!sdata.allocatedTerminal) {
         if (ssh_event_dopoll(mainLoop, -1) == SSH_ERROR){
             printf("Error : %s\n",ssh_get_error(session));
             ssh_disconnect(session);
@@ -137,16 +139,16 @@ void SSHServer::handle_session_connection(ssh_session session) {
     std::println("User: {} connected", sdata.username);
     
     m_mtx.lock();
-    m_terminalWriters[m_nextSessionID] = std::move(std::make_unique<TerminalWriter>(sdata.channel, udata.termWidth, udata.termHeight));    
+    m_terminalWriters[m_nextSessionID] = std::move(std::make_unique<TerminalWriter>(sdata.channel, sdata.termWidth, sdata.termHeight));    
     sdata.sessionId = m_nextSessionID;
     m_nextSessionID += 1;
-    m_mtx.unlock();
-
     auto &terminalWriter = m_terminalWriters[sdata.sessionId];
+    m_mtx.unlock();
+    
     terminalWriter->disable_cursor();
     terminalWriter->alternate_screen_buffer_enable();
-    terminalWriter->write_image("../assets/night_view.csv");
-    listen_for_messages(sdata, udata);
+    terminalWriter->update_terminal(sdata.termWidth, sdata.termHeight);
+    listen_for_messages(sdata);
     
     std::println("User: {} disconnected", sdata.username);
     
@@ -158,19 +160,13 @@ void SSHServer::handle_session_connection(ssh_session session) {
     ssh_disconnect(session);
 }
 
-void SSHServer::listen_for_messages(SessionData &sessionData, UserData &userData) {
+void SSHServer::listen_for_messages(SessionData &sessionData) {
     auto &terminalWriter = m_terminalWriters[sessionData.sessionId];
 
     std::array<char, 2049> buffer;
     int i;
-    // TODO: Replace this with ssh_channel_data_callback for callback based data reading from the channel
-    // Might free up resources
     while(true) {
-        i=ssh_channel_read_nonblocking(sessionData.channel, buffer.data(), buffer.size() - 1, 0);
-        if(userData.updatedTerm) {
-            userData.updatedTerm = false;
-            terminalWriter->update_terminal(userData.termWidth, userData.termHeight);
-        } 
+        i=ssh_channel_read(sessionData.channel, buffer.data(), buffer.size() - 1, 0);
         if (i > 0) {
             if (buffer[0] == '\x03' || buffer[0] == '\x04') { // handle ctrl+c and ctrl+d
                 terminalWriter->alternate_screen_buffer_disable();
