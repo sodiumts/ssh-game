@@ -3,11 +3,10 @@
 #include <fstream>
 #include <vector>
 #include <sstream>
-#include <iostream>
 
 namespace sshGame {
 
-TerminalWriter::TerminalWriter(ssh_channel &channel, int width, int height) : m_channel(channel), m_width(width), m_height(height) {}
+TerminalWriter::TerminalWriter(ssh_channel &channel, int width, int height) : m_channel(channel), m_width(width), m_height(height), m_screenBuffer("") { }
 
 TerminalWriter::~TerminalWriter() {}
 
@@ -35,9 +34,17 @@ void TerminalWriter::disable_cursor() {
     write_string("\e[?25l");
 }
 
-std::string get_centered_text(int width, int height, const std::string& text) {
-    int xPos = (width - text.length()) / 2;
-    int yPos = height / 2;
+std::string TerminalWriter::get_buffer() {
+    return m_screenBuffer;
+}
+
+void TerminalWriter::clear_buffer() {
+    m_screenBuffer = "";
+}
+
+std::string TerminalWriter::get_centered_text(const std::string& text) {
+    int xPos = (m_width - text.length()) / 2;
+    int yPos = m_height / 2;
 
     std::string result = "\033[" + std::to_string(yPos) + ";" + std::to_string(xPos + 1) + "H" + text;
     
@@ -46,14 +53,12 @@ std::string get_centered_text(int width, int height, const std::string& text) {
 
 void TerminalWriter::update_terminal(int width, int height) {
     m_width = width;
-    m_height = height;
-    if (width < 100 || height < 45) {
-        clear_screen();
-        write_string(get_centered_text(width, height, "<< Increase the size of the terminal >>"));
-    } else {
-        clear_screen();
-        write_image("../assets/night_view.csv");
-    }
+    m_height = height; 
+}
+
+void TerminalWriter::write_buffer(const std::string &buffer) {
+    m_screenBuffer = buffer;
+    write_string(buffer);
 }
 
 std::vector<int> mappings = {0, 9786, 9787, 9829, 9830, 9827, 9824, 8226, 9688, 9675, 9689, 9794, 9792, 9834, 9835, 9788, 9658, 9668, 8597, 8252, 182, 167, 9644, 8616, 8593, 8595, 8594, 8592, 8735, 8596, 9650, 9660, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 8962, 199, 252, 233, 226, 228, 224, 229, 231, 234, 235, 232, 239, 238, 236, 196, 197, 201, 230, 198, 244, 246, 242, 251, 249, 255, 214, 220, 162, 163, 165, 8359, 402, 225, 237, 243, 250, 241, 209, 170, 186, 191, 8976, 172, 189, 188, 161, 171, 187, 9617, 9618, 9619, 9474, 9508, 9569, 9570, 9558, 9557, 9571, 9553, 9559, 9565, 9564, 9563, 9488, 9492, 9524, 9516, 9500, 9472, 9532, 9566, 9567, 9562, 9556, 9577, 9574, 9568, 9552, 9580, 9575, 9576, 9572, 9573, 9561, 9560, 9554, 9555, 9579, 9578, 9496, 9484, 9608, 9604, 9612, 9616, 9600, 945, 223, 915, 960, 931, 963, 181, 964, 934, 920, 937, 948, 8734, 966, 949, 8745, 8801, 177, 8805, 8804, 8992, 8993, 247, 8776, 176, 8729, 183, 8730, 8319, 178, 9632, 160};
@@ -84,22 +89,41 @@ std::string extended_ascii_to_utf8(int ascii_code) {
     wchar_t mapping = mappings[ascii_code]; 
     return unicode_to_utf8(mapping);
 }
-void TerminalWriter::print_at_position(int x, int y, const std::string& utf_char, const std::string& fg_color, const std::string& bg_color) {
-    int fg_r = std::stoi(fg_color.substr(1, 2), nullptr, 16);
-    int fg_g = std::stoi(fg_color.substr(3, 2), nullptr, 16);
-    int fg_b = std::stoi(fg_color.substr(5, 2), nullptr, 16);
 
-    int bg_r = std::stoi(bg_color.substr(1, 2), nullptr, 16);
-    int bg_g = std::stoi(bg_color.substr(3, 2), nullptr, 16);
-    int bg_b = std::stoi(bg_color.substr(5, 2), nullptr, 16);
+std::tuple<int, int, int> TerminalWriter::get_color_components(const std::string &color) {
+    int r = std::stoi(color.substr(1, 2), nullptr, 16);
+    int g = std::stoi(color.substr(3, 2), nullptr, 16);
+    int b = std::stoi(color.substr(5, 2), nullptr, 16);
+    return {r, g, b};
+}
 
+std::string TerminalWriter::print_at_position(int x, int y, const std::string& utf_char, const std::string& fg_color, const std::string& bg_color) {
+    auto [fg_r, fg_g, fg_b] = get_color_components(fg_color);
+    auto [bg_r, bg_g, bg_b] = get_color_components(bg_color);
+    
     std::string print = "\033[" + std::to_string(y) + ";" + std::to_string(x) + "H";
     print += "\033[38;2;" + std::to_string(fg_r) + ";" + std::to_string(fg_g) + ";" + std::to_string(fg_b) + "m";
-    print += "\033[48;2;" + std::to_string(bg_r) + ";" + std::to_string(bg_g) + ";" + std::to_string(bg_b) + "m";
+    
+    if(bg_r != 0 && bg_g != 0 && bg_b != 0)
+        print += "\033[48;2;" + std::to_string(bg_r) + ";" + std::to_string(bg_g) + ";" + std::to_string(bg_b) + "m";
     print += utf_char;
     print += "\033[0m";
 
-    write_string(print);
+    return print;
+}
+
+std::string TerminalWriter::print_text(const std::string &text, int x, int y, const std::string &fg_color, const std::string &bg_color) {
+    auto [fg_r, fg_g, fg_b] = get_color_components(fg_color);
+    auto [bg_r, bg_g, bg_b] = get_color_components(bg_color);
+    std::string print = "";
+    print = "\033[" + std::to_string(y) + ";" + std::to_string(x) + "H";
+    print += "\033[38;2;" + std::to_string(fg_r) + ";" + std::to_string(fg_g) + ";" + std::to_string(fg_b) + "m";
+
+    if(bg_r != 0 && bg_g != 0 && bg_b != 0)
+        print += "\033[48;2;" + std::to_string(bg_r) + ";" + std::to_string(bg_g) + ";" + std::to_string(bg_b) + "m";
+    print += text;
+    print += "\033[0m";
+    return print;
 }
 
 void TerminalWriter::write_image(const std::string& filename) {
@@ -107,7 +131,7 @@ void TerminalWriter::write_image(const std::string& filename) {
     if (!file.is_open()) {
         throw std::runtime_error("failed to open file");
     }
-
+    std::string image = "";
     std::string line;
     bool first = true;
     while(std::getline(file, line)) {
@@ -132,7 +156,9 @@ void TerminalWriter::write_image(const std::string& filename) {
 
         std::getline(ss, fg_color, ','); 
         std::getline(ss, bg_color, ',');
-        print_at_position(x, y, extended_ascii_to_utf8(ascii_code), fg_color, bg_color);
+        image += print_at_position(x, y, extended_ascii_to_utf8(ascii_code), fg_color, bg_color);
     }
+    write_string(image);
+    m_screenBuffer += image;
 }
 }

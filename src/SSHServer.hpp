@@ -7,7 +7,8 @@
 
 #include <libssh/libssh.h>
 #include <libssh/server.h>
-#include "TerminalWriter.hpp"
+
+#include "GameHandler.hpp"
 
 namespace sshGame {
 
@@ -55,6 +56,6 @@ class SSHServer : public std::enable_shared_from_this<SSHServer>{
         int m_port;
         uint64_t m_nextSessionID; 
 
-        std::unordered_map<int, std::unique_ptr<TerminalWriter>> m_terminalWriters;
+        std::unordered_map<int, std::unique_ptr<GameHandler>> m_gameHandlers;
 };
 }

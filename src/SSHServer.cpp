@@ -1,6 +1,7 @@
 #include "SSHServer.hpp"
 
 #include <array>
+#include <libssh/libssh.h>
 #include <stdexcept>
 #include <format>
 #include <thread>
@@ -55,7 +56,6 @@ int SSHServer::pty_request(ssh_session session, ssh_channel channel, const char 
     sessionData->termWidth = x;
     sessionData->termHeight = y;
     sessionData->allocatedTerminal = true;
-    //sessionData->server.updatedTerminalCB(*sessionData);
     return 0;
 }
 
@@ -85,8 +85,8 @@ ssh_channel SSHServer::new_session_channel(ssh_session session, void *userdata) 
 }
 
 void SSHServer::updatedTerminalCB(SessionData &sessionData) {
-    auto& terminalWriter = m_terminalWriters[sessionData.sessionId];
-    terminalWriter->update_terminal(sessionData.termWidth, sessionData.termHeight);
+    auto& gameHandler = m_gameHandlers[sessionData.sessionId];
+    gameHandler->receiveScreenChange(sessionData.termWidth, sessionData.termHeight);
 }
 
 void SSHServer::handle_session_connection(ssh_session session) {
@@ -139,21 +139,19 @@ void SSHServer::handle_session_connection(ssh_session session) {
     std::println("User: {} connected", sdata.username);
     
     m_mtx.lock();
-    m_terminalWriters[m_nextSessionID] = std::move(std::make_unique<TerminalWriter>(sdata.channel, sdata.termWidth, sdata.termHeight));    
+    m_gameHandlers[m_nextSessionID] = std::move(std::make_unique<GameHandler>(sdata.channel, sdata.termWidth, sdata.termHeight, sdata.username));    
     sdata.sessionId = m_nextSessionID;
     m_nextSessionID += 1;
-    auto &terminalWriter = m_terminalWriters[sdata.sessionId];
+    auto &gameHandler = m_gameHandlers[sdata.sessionId];
     m_mtx.unlock();
-    
-    terminalWriter->disable_cursor();
-    terminalWriter->alternate_screen_buffer_enable();
-    terminalWriter->update_terminal(sdata.termWidth, sdata.termHeight);
+
+    gameHandler->init();
     listen_for_messages(sdata);
     
     std::println("User: {} disconnected", sdata.username);
     
     m_mtx.lock();
-    m_terminalWriters.erase(sdata.sessionId);
+    m_gameHandlers.erase(sdata.sessionId);
     m_mtx.unlock();
 
     ssh_channel_free(sdata.channel);
@@ -161,21 +159,21 @@ void SSHServer::handle_session_connection(ssh_session session) {
 }
 
 void SSHServer::listen_for_messages(SessionData &sessionData) {
-    auto &terminalWriter = m_terminalWriters[sessionData.sessionId];
+    auto &gameHandler = m_gameHandlers[sessionData.sessionId];
 
     std::array<char, 2049> buffer;
     int i;
     while(true) {
         i=ssh_channel_read(sessionData.channel, buffer.data(), buffer.size() - 1, 0);
         if (i > 0) {
-            if (buffer[0] == '\x03' || buffer[0] == '\x04') { // handle ctrl+c and ctrl+d
-                terminalWriter->alternate_screen_buffer_disable();
-                terminalWriter->enable_cursor();
+            if (buffer[0] == '\x03' || buffer[0] == '\x04' || buffer[0] == 'q') { // handle ctrl+c and ctrl+d
+                gameHandler->quit();
                 break; 
             } 
 
             buffer[i] = '\0';
-            std::println("Message from {}: {}", sessionData.username, buffer.data());
+            //std::println("Message from {}: {}", sessionData.username, buffer.data());
+            gameHandler->receiveInput(buffer.data());
         }
     } 
 }
