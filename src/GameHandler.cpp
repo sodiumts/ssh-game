@@ -1,7 +1,8 @@
 #include "GameHandler.hpp"
 
 #include <memory>
-#include <print>
+//#include <print>
+#include <iostream>
 
 namespace sshGame {
 
@@ -29,7 +30,8 @@ void GameHandler::receiveInput(const std::string &input) {
     if(input.length() > 1)
         return;
     
-    std::println("User {}: {}", m_username, input);
+    //std::println("User {}: {}", m_username, input);
+    std::cout << "User " << m_username << ": " << input << std::endl;
 }
 
 void GameHandler::receiveScreenChange(int width, int height) {
