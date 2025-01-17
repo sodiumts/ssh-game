@@ -3,8 +3,8 @@
 #include <libssh/libssh.h>
 #include <string>
 
-#define MIN_WIDTH 55
-#define MIN_HEIGHT 25
+#define MIN_WIDTH 100
+#define MIN_HEIGHT 40
 
 namespace sshGame {
 class TerminalWriter {

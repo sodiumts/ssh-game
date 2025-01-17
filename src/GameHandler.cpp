@@ -53,7 +53,8 @@ void GameHandler::receiveScreenChange(int width, int height) {
         m_firstTooSmall = true; 
     }
     m_terminalWriter->clear_screen();
-    drawControls();
+    //drawControls();
+    m_terminalWriter->write_image("../assets/night_view.csv");
 }
 
 void GameHandler::displayIncreaseSize() {
@@ -97,9 +98,9 @@ void GameHandler::initialScreen() {
     m_terminalWriter->clear_screen();
     m_terminalWriter->disable_cursor();
     m_terminalWriter->alternate_screen_buffer_enable();
-    //m_terminalWriter->write_image("../assets/night_view.csv");
+    m_terminalWriter->write_image("../assets/night_view.csv");
     //drawBorder();
-    drawControls();
+    //drawControls();
     
 
 }
