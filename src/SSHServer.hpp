@@ -54,7 +54,7 @@ class SSHServer : public std::enable_shared_from_this<SSHServer>{
         std::mutex m_mtx;
         ssh_bind m_sshBind;
         int m_port;
-        uint64_t m_nextSessionID; 
+        uint64_t m_nextSessionID = 0; 
 
         std::unordered_map<int, std::unique_ptr<GameHandler>> m_gameHandlers;
 };
