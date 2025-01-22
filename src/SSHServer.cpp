@@ -113,6 +113,7 @@ void SSHServer::handle_session_connection(ssh_session session) {
     
     if (ssh_handle_key_exchange(session)) {
         ssh_disconnect(session);
+        ssh_free(session);
         return;
     }
     
@@ -122,6 +123,7 @@ void SSHServer::handle_session_connection(ssh_session session) {
     while (!(sdata.authenticated && sdata.channel != nullptr)){
         if (ssh_event_dopoll(mainLoop, -1) == SSH_ERROR){
             ssh_disconnect(session);
+            ssh_free(session);
             return;
         }
     }
@@ -132,6 +134,7 @@ void SSHServer::handle_session_connection(ssh_session session) {
         if (ssh_event_dopoll(mainLoop, -1) == SSH_ERROR){
             printf("Error : %s\n",ssh_get_error(session));
             ssh_disconnect(session);
+            ssh_free(session);
             return;
         } 
     }
@@ -153,9 +156,11 @@ void SSHServer::handle_session_connection(ssh_session session) {
     m_mtx.lock();
     m_gameHandlers.erase(sdata.sessionId);
     m_mtx.unlock();
-
+    
+    ssh_event_free(mainLoop);
     ssh_channel_free(sdata.channel);
     ssh_disconnect(session);
+    ssh_free(session);
 }
 
 void SSHServer::listen_for_messages(SessionData &sessionData) {
