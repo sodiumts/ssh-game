@@ -2,7 +2,7 @@
 Currently displays a centered ANSI art image when you connect to the server. By design it does not have any authentication.  
   
 Goal for this is to be used as a base for an interactive ssh application, for example a game. 
-
+![Image of ANSI scene on the ssh server](images/example.png)
 ## Requirements
 - Libssh 
 - CMake
