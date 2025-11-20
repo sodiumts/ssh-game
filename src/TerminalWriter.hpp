@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ANSIImage.hpp"
 #include <libssh/libssh.h>
 #include <string>
 
@@ -23,14 +24,14 @@ class TerminalWriter {
         void enable_cursor();
         void disable_cursor();
         void clear_screen();
-	void enable_mouse_reporting();
+	    void enable_mouse_reporting();
 
         std::string get_centered_text(const std::string &text);
         void clear_buffer();   
         void write_buffer(const std::string &buffer);
 
         void update_terminal(int width, int height);
-        void write_image(const std::string &image);
+        void write_image(ANSIImage &image, bool centered = false);
             
         std::tuple<int, int, int> get_color_components(const std::string &color);
         std::string print_text(const std::string &text, int x = 0, int y = 0, const std::string &fg_color = "#FFFFFF", const std::string &bg_color = "#000000");

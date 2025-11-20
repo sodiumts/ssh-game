@@ -24,6 +24,8 @@ class GameHandler {
 
         std::unique_ptr<TerminalWriter> m_terminalWriter; 
         std::string m_username;
+
+        ANSIImage m_nightImage{"../assets/night_view.csv"};
         
         int m_width;
         int m_height;

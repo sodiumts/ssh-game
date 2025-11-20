@@ -1,7 +1,6 @@
 #include "GameHandler.hpp"
 
 #include <memory>
-//#include <print>
 #include <iostream>
 
 namespace sshGame {
@@ -30,39 +29,36 @@ void GameHandler::receiveInput(const std::string &input) {
     if(input.length() > 1)
         return;
     
-    //std::println("User {}: {}", m_username, input);
     std::cout << "User " << m_username << ": " << input << std::endl;
 }
 
 void GameHandler::receiveScreenChange(int width, int height) {
     m_width = width;
     m_height = height;
-    
+
     m_terminalWriter->update_terminal(m_width, m_height);
     if (m_width < MIN_WIDTH || m_height < MIN_HEIGHT) {
         if (m_firstTooSmall) {
             m_storedBuffer = m_terminalWriter->get_buffer();
             m_firstTooSmall = false;
         }
-        
+
         m_terminalWriter->clear_buffer();
         displayIncreaseSize();
     } else {
-	    if (!m_firstTooSmall) {
-        	m_terminalWriter->clear_screen();
-        	m_terminalWriter->clear_buffer();
-        	m_terminalWriter->write_buffer(m_storedBuffer);
-        	m_firstTooSmall = true; 
-    	} else {
-		m_terminalWriter->clear_screen();
-		m_terminalWriter->clear_buffer();
-    		m_terminalWriter->write_image("../assets/night_view.csv");
-
-	}
+        if (!m_firstTooSmall) {
+            m_terminalWriter->clear_screen();
+            m_terminalWriter->clear_buffer();
+            m_terminalWriter->write_buffer(m_storedBuffer);
+            m_firstTooSmall = true; 
+        } else {
+            m_terminalWriter->clear_screen();
+            m_terminalWriter->clear_buffer();
+            m_terminalWriter->write_image(m_nightImage, true);
+        }
     }
     //m_terminalWriter->clear_screen();
     ////drawControls();
-    //m_terminalWriter->write_image("../assets/night_view.csv");
 }
 
 void GameHandler::displayIncreaseSize() {
@@ -106,7 +102,7 @@ void GameHandler::initialScreen() {
     m_terminalWriter->clear_screen();
     m_terminalWriter->disable_cursor();
     m_terminalWriter->alternate_screen_buffer_enable();
-    m_terminalWriter->write_image("../assets/night_view.csv");
+    m_terminalWriter->write_image(m_nightImage, true);
     //m_terminalWriter->enable_mouse_reporting();
 
     //drawBorder();
