@@ -2,7 +2,7 @@
 Currently displays a centered ANSI art image when you connect to the server. By design it does not have any authentication.  
   
 Goal for this is to be used as a base for an interactive ssh application, for example a game. 
-[![asciicast](https://asciinema.org/a/pv6lnMsLalF62kwH5szdSzE6M.svg)](https://asciinema.org/a/pv6lnMsLalF62kwH5szdSzE6M)
+<script src="https://asciinema.org/a/pv6lnMsLalF62kwH5szdSzE6M.js" id="asciicast-pv6lnMsLalF62kwH5szdSzE6M" async="true"></script>
 ## Requirements
 - Libssh 
 - CMake
