@@ -2,11 +2,18 @@
 
 #include <print>
 
-const char* hostkey_path = "ssh_host_rsa_key";
-const int PORT = 22;
+int main(int argc, char* argv[]) {
+    
+    if (argc < 3) {
+	std::println("Not enough arguments provided: port, host key path");
+	return -1;
+    }
 
-int main() {
-    auto server = std::make_shared<sshGame::SSHServer>("0.0.0.0", PORT, hostkey_path);
+    int arg_port = std::stoi(argv[1]);
+    char * key_path = argv[2];
+
+
+    auto server = std::make_shared<sshGame::SSHServer>("0.0.0.0", arg_port, key_path);
     server->bindListen();
     server->listenForConnections();
 }
