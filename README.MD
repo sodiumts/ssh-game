@@ -1,5 +1,6 @@
 # Interactive ssh server made in c++23 with Libssh  
 Currently displays a centered ANSI art image when you connect to the server. By design it does not have any authentication.  
+  
 Goal for this is to be used as a base for an interactive ssh application, for example a game. 
 
 ## Requirements
