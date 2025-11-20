@@ -20,6 +20,7 @@ After you have the key, you can run the build executable in the build folder:
 ```
 
 First argument is the port to run the ssh server on, and the second is the previously generated private key path.  
+  
 You can then connect to the server with:
 ```sh
 ssh -p 2200 0.0.0.0
