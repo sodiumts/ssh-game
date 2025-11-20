@@ -3,6 +3,7 @@
 #include <fstream>
 #include <vector>
 #include <sstream>
+#include <print>
 
 namespace sshGame {
 
@@ -40,6 +41,9 @@ std::string TerminalWriter::get_buffer() {
 
 void TerminalWriter::clear_buffer() {
     m_screenBuffer = "";
+}
+void TerminalWriter::enable_mouse_reporting() {
+    write_string("\e[?1000h");
 }
 
 std::string TerminalWriter::get_centered_text(const std::string& text) {
@@ -133,7 +137,13 @@ void TerminalWriter::write_image(const std::string& filename) {
     }
     std::string image = "";
     std::string line;
+    
+    
+    std::vector<std::tuple<int, int, int, std::string, std::string>> image_data;
+    int min_x = 20000, max_x = 0, min_y = 20000, max_y = 0;
+
     bool first = true;
+
     while(std::getline(file, line)) {
         if(first) {
             first = false;
@@ -156,8 +166,34 @@ void TerminalWriter::write_image(const std::string& filename) {
 
         std::getline(ss, fg_color, ','); 
         std::getline(ss, bg_color, ',');
-        image += print_at_position(x, y, extended_ascii_to_utf8(ascii_code), fg_color, bg_color);
+        //image += print_at_position(x, y, extended_ascii_to_utf8(ascii_code), fg_color, bg_color);
+	image_data.push_back({x,y,ascii_code,fg_color,bg_color});
+	min_x = std::min(min_x, x);
+        max_x = std::max(max_x, x);
+        min_y = std::min(min_y, y);
+        max_y = std::max(max_y, y);
     }
+
+     int image_width = max_x - min_x + 1;
+    int image_height = max_y - min_y + 1;
+    
+    int x_offset = (m_width - image_width) / 2 - min_x + 1;
+    int y_offset = (m_height - image_height) / 2 - min_y + 1 + 5;
+    //std::println("Image bounds: x[{}, {}] y[{}, {}]", min_x, max_x, min_y, max_y);
+    //std::println("Image dimensions: {}x{}", image_width, image_height);
+    //std::println("Terminal dimensions: {}x{}", m_width, m_height);
+    //std::println("Offsets: x={}, y={}", x_offset, y_offset);
+    // Second pass: build the image with centered coordinates
+    for(const auto& [x, y, ascii_code, fg_color, bg_color] : image_data) {
+        int centered_x = x_offset + (x - min_x) + 1;  // +1 because terminal is 1-indexed
+        int centered_y = y_offset + (y - min_y) + 1;  // +1 because terminal is 1-indexed
+        
+        // Ensure coordinates are within terminal bounds
+        if(centered_x >= 1 && centered_x <= m_width && centered_y >= 1 && centered_y <= m_height) {
+            image += print_at_position(centered_x, centered_y, extended_ascii_to_utf8(ascii_code), fg_color, bg_color);
+        }
+    }
+
     write_string(image);
     m_screenBuffer += image;
 }

@@ -52,14 +52,22 @@ int SSHServer::auth_none(ssh_session session, const char *user, void *userdata) 
 }
 
 int SSHServer::pty_request(ssh_session session, ssh_channel channel, const char *term, int x, int y, int px, int py, void *userdata) {
+    std::println("Pty request called");
     struct SessionData *sessionData = static_cast<SessionData*>(userdata);
     sessionData->termWidth = x;
     sessionData->termHeight = y;
     sessionData->allocatedTerminal = true;
+
+    //const char *sgr_mouse_on = "\x1b[?1006h";
+    //const char *mouse_on = "\x1b[?1000h";
+    //ssh_channel_write(channel, sgr_mouse_on, strlen(sgr_mouse_on));
+    //ssh_channel_write(channel, mouse_on, strlen(mouse_on));
+
     return 0;
 }
 
 int SSHServer::shell_request(ssh_session session, ssh_channel channel, void *userdata) {
+    std::println("Shell request called");
     return 0;
 }
 
@@ -169,12 +177,23 @@ void SSHServer::listen_for_messages(SessionData &sessionData) {
     std::array<char, 2049> buffer;
     int i;
     while(true) {
+
         i=ssh_channel_read(sessionData.channel, buffer.data(), buffer.size() - 1, 0);
         if (i > 0) {
             if (buffer[0] == '\x03' || buffer[0] == '\x04' || buffer[0] == 'q') { // handle ctrl+c and ctrl+d
                 gameHandler->quit();
                 break; 
             } 
+
+	    if (i > 6 && strncmp(buffer.data(), "\x1b[<", 3) == 0) {
+	    	int button, x, y;
+	        char action;
+	        if (sscanf(buffer.data(), "\x1b[<%d;%d;%d%c", &button, &x, &y, &action) >= 4) {
+	        	std::println("Button: {}, x: {}, y: {}, action: {}", button, x, y, action);
+	        		
+	        	continue;
+	        }
+	    }
 
             buffer[i] = '\0';
             //std::println("Message from {}: {}", sessionData.username, buffer.data());

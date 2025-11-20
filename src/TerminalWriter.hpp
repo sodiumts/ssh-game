@@ -23,6 +23,7 @@ class TerminalWriter {
         void enable_cursor();
         void disable_cursor();
         void clear_screen();
+	void enable_mouse_reporting();
 
         std::string get_centered_text(const std::string &text);
         void clear_buffer();   

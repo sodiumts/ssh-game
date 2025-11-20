@@ -47,16 +47,22 @@ void GameHandler::receiveScreenChange(int width, int height) {
         
         m_terminalWriter->clear_buffer();
         displayIncreaseSize();
-        return;
-    } else if (!m_firstTooSmall) {
-        m_terminalWriter->clear_screen();
-        m_terminalWriter->clear_buffer();
-        m_terminalWriter->write_buffer(m_storedBuffer);
-        m_firstTooSmall = true; 
+    } else {
+	    if (!m_firstTooSmall) {
+        	m_terminalWriter->clear_screen();
+        	m_terminalWriter->clear_buffer();
+        	m_terminalWriter->write_buffer(m_storedBuffer);
+        	m_firstTooSmall = true; 
+    	} else {
+		m_terminalWriter->clear_screen();
+		m_terminalWriter->clear_buffer();
+    		m_terminalWriter->write_image("../assets/night_view.csv");
+
+	}
     }
-    m_terminalWriter->clear_screen();
-    //drawControls();
-    m_terminalWriter->write_image("../assets/night_view.csv");
+    //m_terminalWriter->clear_screen();
+    ////drawControls();
+    //m_terminalWriter->write_image("../assets/night_view.csv");
 }
 
 void GameHandler::displayIncreaseSize() {
@@ -101,6 +107,8 @@ void GameHandler::initialScreen() {
     m_terminalWriter->disable_cursor();
     m_terminalWriter->alternate_screen_buffer_enable();
     m_terminalWriter->write_image("../assets/night_view.csv");
+    //m_terminalWriter->enable_mouse_reporting();
+
     //drawBorder();
     //drawControls();
     
